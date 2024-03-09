@@ -5,13 +5,20 @@ endif
 CFLAGS+= -std=c11 -O3 -march=native -mtune=native -flto -Wall -Wextra -Wpedantic \
 -Wformat=2 -Wconversion -Wundef -Winline -Wimplicit-fallthrough -DNTHREADS=$(NTHREADS)
 
+CXXFLAGS+= -std=c++11 -O3 -march=native -mtune=native -flto -Wall -Wextra -Wpedantic \
+-Wformat=2 -Wconversion -Wundef -Winline -Wimplicit-fallthrough -DNTHREADS=$(NTHREADS)
+
 ifdef DEBUG
 CFLAGS+= -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS 	\
 -fsanitize=address -fsanitize=undefined -g 									\
 -fstack-protector-strong
+
+CXXFLAGS+= -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS 	\
+-fsanitize=address -fsanitize=undefined -g 									\
+-fstack-protector-strong
 endif
 
-all: bin/ bin/create-sample bin/analyze
+all: bin/ bin/create-sample bin/analyze bin/main
 
 bin/:
 	mkdir -p bin/
@@ -25,6 +32,9 @@ bin/create-sample: create-sample.c
 
 bin/analyze: analyze.c
 	$(CC) $(CFLAGS) $^ -o $@
+
+bin/main: src/main.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@
 
 .PHONY: clean
 clean:
