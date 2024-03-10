@@ -5,7 +5,7 @@
 #include <vector>
 #include <algorithm>
 #include <thread>
-#include "CircularBuffer.h"
+#include "buffer.h"
 
 
 struct cityInfo {
@@ -28,7 +28,7 @@ void updateCityInfos(std::string cityName, double temperature, std::unordered_ma
 }
 
 // Function for the worker thread to parse data and enqueue it into the buffer
-void workerThread(CircularBuffer<std::pair<std::string, double>>& buffer, std::string filename) {
+void workerThread(Buffer& buffer, std::string filename) {
     // Open the file
     std::ifstream file(filename);
 
@@ -59,14 +59,18 @@ void workerThread(CircularBuffer<std::pair<std::string, double>>& buffer, std::s
 }
 
 // Function for the processing thread to dequeue data from the buffer and process it
-void processThread(CircularBuffer<std::pair<std::string, double>>& buffer, std::unordered_map<std::string, cityInfo>& cityInfos) {
+void processThread(Buffer& buffer, std::unordered_map<std::string, cityInfo>& cityInfos) {
     // Process data from the circular buffer
     while (true) {
-        auto data = buffer.dequeue();
-        if (data.first.empty()) // Signal to exit
-            break;
-        updateCityInfos(data.first, data.second, cityInfos);
-    }
+    auto data = buffer.dequeue();
+    const std::string& city = std::get<0>(data);
+    double temperature = std::get<1>(data);
+
+    if (city.empty()) // Signal to exit
+        break;
+        
+    updateCityInfos(city, temperature, cityInfos);
+}
 }
 
 // Comparator function to sort cityInfos by city name
@@ -85,7 +89,7 @@ int main(int argc, char* argv[]) {
     }
 
     // Create a circular buffer to store city data
-    CircularBuffer<std::pair<std::string, double>> buffer(512); // Adjust size as needed
+    Buffer buffer(512); // Adjust size as needed
 
     // Start the worker thread
     std::thread worker(workerThread, std::ref(buffer), argv[1]);
