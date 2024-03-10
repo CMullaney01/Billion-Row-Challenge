@@ -1,41 +1,36 @@
-ifndef NTHREADS
-NTHREADS=$(shell nproc --all 2>/dev/null || sysctl -n hw.logicalcpu)
-endif
+CXX = g++
+CXXFLAGS = -Wall -Wextra -pedantic -std=c++11 -I./src/includes
+LDFLAGS = 
 
-CFLAGS+= -std=c11 -O3 -march=native -mtune=native -flto -Wall -Wextra -Wpedantic \
--Wformat=2 -Wconversion -Wundef -Winline -Wimplicit-fallthrough -DNTHREADS=$(NTHREADS)
+SRC_DIR = ./src
+BIN_DIR = ./bin
+OBJ_DIR = $(BIN_DIR)/obj
 
-CXXFLAGS+= -std=c++11 -O3 -march=native -mtune=native -flto -Wall -Wextra -Wpedantic \
--Wformat=2 -Wconversion -Wundef -Winline -Wimplicit-fallthrough -DNTHREADS=$(NTHREADS)
+SOURCES := $(wildcard $(SRC_DIR)/classes/*.cpp)
+OBJECTS := $(SOURCES:$(SRC_DIR)/classes/%.cpp=$(OBJ_DIR)/%.o)
+EXECUTABLE := $(BIN_DIR)/main
 
+# Debugging options
 ifdef DEBUG
-CFLAGS+= -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS 	\
--fsanitize=address -fsanitize=undefined -g 									\
--fstack-protector-strong
-
-CXXFLAGS+= -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS 	\
--fsanitize=address -fsanitize=undefined -g 									\
--fstack-protector-strong
+	CXXFLAGS += -g -O0
 endif
 
-all: bin/ bin/create-sample bin/analyze bin/main
+.PHONY: all clean
 
-bin/:
-	mkdir -p bin/
+all: $(EXECUTABLE)
 
-.PHONY: profile
-profile: bin/analyze
-	perf record --call-graph dwarf bin/analyze measurements-1M.txt
+$(EXECUTABLE): $(OBJ_DIR) $(OBJECTS) $(SRC_DIR)/main.cpp
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(SRC_DIR)/main.cpp $(OBJECTS) -o $(EXECUTABLE)
 
-bin/create-sample: create-sample.c
-	$(CC) $(CFLAGS) $^ -lm -o $@
+$(OBJ_DIR)/%.o: $(SRC_DIR)/classes/%.cpp $(SRC_DIR)/includes/%.h | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-bin/analyze: analyze.c
-	$(CC) $(CFLAGS) $^ -o $@
+$(OBJ_DIR):
+	mkdir -p $(OBJ_DIR)
 
-bin/main: src/main.cpp
-	$(CXX) $(CXXFLAGS) $^ -o $@
-
-.PHONY: clean
 clean:
-	rm -r bin/
+	rm -rf $(BIN_DIR)
+
+# Debugging target
+debug: CXXFLAGS += -DDEBUG
+debug: all
