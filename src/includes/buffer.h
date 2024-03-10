@@ -1,24 +1,24 @@
-#ifndef BUFFER_DEFINED
-#define BUFFER_DEFINED
+#ifndef BUFFER_H
+#define BUFFER_H
 
 #include <vector>
-#include <atomic> // For atomic operations
 #include <tuple>
 #include <string>
 
 class Buffer {
 private:
-    std::vector<std::tuple<std::string, double>> buffer; // Buffer of tuples (city name, temperature)
+    std::vector<std::tuple<std::string, double>> buffer;
     size_t capacity;
-    std::atomic<size_t> head; // Atomic indices for thread-safe access
-    std::atomic<size_t> tail;
+    size_t head;
+    size_t tail;
 
 public:
     Buffer(size_t capacity);
     bool isEmpty() const;
     bool isFull() const;
-    void enqueue(const std::tuple<std::string, double>& item);
+    void enqueue(std::tuple<std::string, double>&& item);
     std::tuple<std::string, double> dequeue();
+    void printBuffer() const;
 };
 
-#endif
+#endif /* BUFFER_H */
