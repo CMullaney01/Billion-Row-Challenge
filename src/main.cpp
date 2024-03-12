@@ -49,32 +49,28 @@ void Thread(const char* data, off_t chunk_start, off_t chunk_end, std::unordered
 
     // Process the chunk of data byte by byte
     while (pos < chunk_end) {
-        // Read characters until a newline is encountered or the end of the chunk is reached
+        std::string cityName;
+        double temperature;
         char c = data[pos]; // Initialize c with data[pos]
-        while (c != '\n' && pos < chunk_end) {
-            line.push_back(c);
-            ++pos;
+
+        // Read characters until encountering ';' which separates city name and temperature
+        while (c != ';' && pos < chunk_end) {
             c = data[pos]; // Read the next character
+            cityName.push_back(c);
+            ++pos;
         }
-        ++pos;
+        ++pos; // skip ";"
 
-        // Output the line (for testing purposes)
-        // std::cout << line << std::endl;
+        // Read characters until encountering '\n' which marks the end of temperature
+        std::string tempStr;
+        while (c != '\n' && pos < chunk_end) {
+            c = data[pos]; // Read the next character
+            tempStr.push_back(c);
+            ++pos;
+        }
+        temperature = std::stod(tempStr);
 
-        // Find the position of the first ';' character
-        size_t delimiterPos = line.find(';');
-        if (delimiterPos == std::string::npos)
-            continue; // Not a valid line format
-
-        // Extract the city name and temperature
-        std::string cityName = line.substr(0, delimiterPos);
-        double temperature = std::strtod(line.c_str() + delimiterPos + 1, nullptr);
-
-        // Update cityInfos
         updateCityInfos(cityName, temperature, cityInfos);
-
-        // Clear the line buffer for the next line
-        line.clear();
     }
 }
 
