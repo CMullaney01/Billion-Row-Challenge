@@ -11,7 +11,7 @@
 #include <unistd.h>
 #include <chrono> 
 
-#define CHUNKS 12
+#define CHUNKS 16
 
 struct cityInfo {
     int count;
@@ -49,28 +49,32 @@ void Thread(const char* data, off_t chunk_start, off_t chunk_end, std::unordered
 
     // Process the chunk of data byte by byte
     while (pos < chunk_end) {
-        std::string cityName;
-        double temperature;
+        // Read characters until a newline is encountered or the end of the chunk is reached
         char c = data[pos]; // Initialize c with data[pos]
-
-        // Read characters until encountering ';' which separates city name and temperature
-        while (c != ';' && pos < chunk_end) {
-            c = data[pos]; // Read the next character
-            cityName.push_back(c);
-            ++pos;
-        }
-        ++pos; // skip ";"
-
-        // Read characters until encountering '\n' which marks the end of temperature
-        std::string tempStr;
         while (c != '\n' && pos < chunk_end) {
-            c = data[pos]; // Read the next character
-            tempStr.push_back(c);
+            line.push_back(c);
             ++pos;
+            c = data[pos]; // Read the next character
         }
-        temperature = std::stod(tempStr);
+        ++pos;
 
+        // Output the line (for testing purposes)
+        // std::cout << line << std::endl;
+
+        // Find the position of the first ';' character
+        size_t delimiterPos = line.find(';');
+        if (delimiterPos == std::string::npos)
+            continue; // Not a valid line format
+
+        // Extract the city name and temperature
+        std::string cityName = line.substr(0, delimiterPos);
+        double temperature = std::strtod(line.c_str() + delimiterPos + 1, nullptr);
+
+        // Update cityInfos
         updateCityInfos(cityName, temperature, cityInfos);
+
+        // Clear the line buffer for the next line
+        line.clear();
     }
 }
 
@@ -171,6 +175,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Threads time: " << threads_time.count() << " seconds" << std::endl;
     std::cout << "Mapping file time: " << map_file_time.count() << " seconds" << std::endl;
     std::cout << "Total execution time: " << total_time.count() << " seconds" << std::endl;
+
 
     return 0;
 }
