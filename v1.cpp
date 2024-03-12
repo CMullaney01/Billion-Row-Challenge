@@ -1,3 +1,4 @@
+// we tries to thread, 1 processer 1 parser - was slower
 #include <iostream>
 #include <fstream>
 #include <string>

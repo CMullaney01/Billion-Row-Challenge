@@ -2,19 +2,26 @@
 #include <fstream>
 #include <string>
 #include <unordered_map>
-#include <vector>
-#include <algorithm>
 #include <thread>
-#include "buffer.h"
+#include <vector>
+#include <sstream>
+#include <algorithm>
+#include <sys/mman.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <chrono> 
 
+#define CHUNKS 12
 
 struct cityInfo {
     int count;
     double sum, min, max;
 };
 
-// Global variable to indicate whether the worker thread has finished
-bool workerFinished = false;
+void error(const std::string& message) {
+    std::cerr << "Error: " << message << std::endl;
+    std::exit(EXIT_FAILURE);
+}
 
 // Function to update cityInfos based on temperature and city
 void updateCityInfos(std::string cityName, double temperature, std::unordered_map<std::string, cityInfo>& cityInfos) {
@@ -30,19 +37,30 @@ void updateCityInfos(std::string cityName, double temperature, std::unordered_ma
     }
 }
 
-// Function for the worker thread to parse data and enqueue it into the buffer
-void workerThread(Buffer& buffer, std::string filename) {
-    // Open the file
-    std::ifstream file(filename);
-    // Check if the file is opened successfully
-    if (!file.is_open()) {
-        std::cerr << "Error opening the file." << std::endl;
-        return; // Exit the function if file opening fails
-    }
+// Comparator function to sort cityInfos by city name
+bool compareCityInfos(const std::pair<std::string, cityInfo>& a, const std::pair<std::string, cityInfo>& b) {
+    return a.first < b.first;
+}
 
-    // Read and enqueue each line from the file into the circular buffer
+// Function to process a chunk of data
+void Thread(const char* data, off_t chunk_start, off_t chunk_end, std::unordered_map<std::string, cityInfo>& cityInfos) {
+    off_t pos = chunk_start;
     std::string line;
-    while (std::getline(file, line)) {
+
+    // Process the chunk of data byte by byte
+    while (pos < chunk_end) {
+        // Read characters until a newline is encountered or the end of the chunk is reached
+        char c = data[pos]; // Initialize c with data[pos]
+        while (c != '\n' && pos < chunk_end) {
+            line.push_back(c);
+            ++pos;
+            c = data[pos]; // Read the next character
+        }
+        ++pos;
+
+        // Output the line (for testing purposes)
+        // std::cout << line << std::endl;
+
         // Find the position of the first ';' character
         size_t delimiterPos = line.find(';');
         if (delimiterPos == std::string::npos)
@@ -50,85 +68,113 @@ void workerThread(Buffer& buffer, std::string filename) {
 
         // Extract the city name and temperature
         std::string cityName = line.substr(0, delimiterPos);
-        double temperature = std::stod(line.substr(delimiterPos + 1));
+        double temperature = std::strtod(line.c_str() + delimiterPos + 1, nullptr);
 
-        // Enqueue city data into the circular buffer
-        buffer.enqueue(std::make_tuple(std::move(cityName), temperature));
+        // Update cityInfos
+        updateCityInfos(cityName, temperature, cityInfos);
+
+        // Clear the line buffer for the next line
+        line.clear();
     }
-
-    // Close the file
-    file.close();
-
-    // Signal that the worker thread has finished
-    workerFinished = true;
-    std::cout << "Worker thread finished." << std::endl;
-}
-
-// Function for the processing thread to dequeue data from the buffer and process it
-void processThread(Buffer& buffer, std::unordered_map<std::string, cityInfo>& cityInfos) {
-    // Process data from the circular buffer
-    while (true) {
-        auto data = buffer.dequeue();
-        const std::string& city = std::get<0>(data);
-        double temperature = std::get<1>(data);
-
-        // Print received data
-        // std::cout << "Received: City: " << city << ", Temperature: " << temperature << std::endl;
-
-        // Break the loop if the buffer is empty (signaling to exit)
-        if (buffer.isEmpty() && workerFinished)
-            break;
-            
-        updateCityInfos(city, temperature, cityInfos);
-    }
-    std::cout << "Processor thread finished." << std::endl;
 }
 
 
-// Comparator function to sort cityInfos by city name
-bool compareCityInfos(const std::pair<std::string, cityInfo>& a, const std::pair<std::string, cityInfo>& b) {
-    return a.first < b.first;
-}
 
 int main(int argc, char* argv[]) {
-    // Create a map (unordered)
-    std::unordered_map<std::string, cityInfo> cityInfos;
-
     // Check if the filename is provided as an argument
+    auto total_time_start = std::chrono::steady_clock::now();
     if (argc != 2) {
         std::cerr << "Usage: " << argv[0] << " <filename>" << std::endl;
         return 1;
     }
 
-    // Create a circular buffer to store city data
-    Buffer buffer(131072); // Adjust size as needed
+    std::string filename = argv[1];
+    int numChunks = CHUNKS;
+    auto map_file_start = std::chrono::steady_clock::now();
+    // Open the file
+    int fd = open(filename.c_str(), O_RDONLY);
+    if (fd == -1)
+        error("Failed to open file");
 
-    std::cout << "Starting worker thread..." << std::endl;
-    std::thread worker(workerThread, std::ref(buffer), argv[1]);
+    // Obtain the size of the file
+    off_t fileSize = lseek(fd, 0, SEEK_END);
+    if (fileSize == -1)
+        error("Failed to determine file size");
 
-    std::cout << "Starting processor thread..." << std::endl;
-    std::thread processor(processThread, std::ref(buffer), std::ref(cityInfos));
+    // Memory map the file
+    char* mappedFile = static_cast<char*>(mmap(nullptr, fileSize, PROT_READ, MAP_PRIVATE, fd, 0));
+    if (mappedFile == MAP_FAILED)
+        error("Failed to map file into memory");
+    auto map_file_end = std::chrono::steady_clock::now();
+    auto threads_start = std::chrono::steady_clock::now();
+    // Create threads to process chunks
+    std::vector<std::thread> threads;
+    std::vector<std::unordered_map<std::string, cityInfo>> cityMaps(numChunks); // Vector of city info maps
+    for (int i = 0; i < numChunks; ++i) {
+        // std::cout << "Starting Thread: " << i << std::endl;
+        off_t start = i * fileSize / numChunks;
+        off_t end = (i + 1) * fileSize / numChunks; // C 
+        threads.emplace_back(Thread, mappedFile, start, end, std::ref(cityMaps[i]));
+    }
 
-    // Wait for the worker thread to finish
-    worker.join();
+    // Wait for all threads to finish
+    for (auto& thread : threads) {
+        thread.join();
+    }
+    auto threads_end = std::chrono::steady_clock::now();
 
-    // Wait for the process thread to finish
-    processor.join();
+    // Unmap the file
+    if (munmap(mappedFile, fileSize) == -1)
+        error("Failed to unmap file");
 
-    // print at the end
-    // // Convert the unordered map to a vector for sorting
-    // std::vector<std::pair<std::string, cityInfo>> sortedcityInfos(cityInfos.begin(), cityInfos.end());
-    
-    // // Sort the cityInfos by city name
-    // std::sort(sortedcityInfos.begin(), sortedcityInfos.end(), compareCityInfos);
+    // Close the file descriptor
+    if (close(fd) == -1)
+        error("Failed to close file");
 
-    // // Output sorted cityInfos
-    // for (const auto& pair : sortedcityInfos) {
-    //     const cityInfo& res = pair.second;
-    //     double mean = res.sum / static_cast<double>(res.count);
-    //     std::cout << "City: " << pair.first << ", Min: " << res.min
-    //               << ", Mean: " << mean << ", Max: " << res.max << std::endl;
-    // }
+    auto combine_threads_start = std::chrono::steady_clock::now();
+    // Combine the city information from all maps into a single map
+    std::unordered_map<std::string, cityInfo> combinedCityInfo;
+    for (const auto& cityMap : cityMaps) {
+        for (const auto& pair : cityMap) {
+            const std::string& cityName = pair.first;
+            const cityInfo& info = pair.second;
+            combinedCityInfo[cityName].sum += info.sum;
+            combinedCityInfo[cityName].count += info.count;
+            combinedCityInfo[cityName].min = std::min(combinedCityInfo[cityName].min, info.min);
+            combinedCityInfo[cityName].max = std::max(combinedCityInfo[cityName].max, info.max);
+        }
+    }
+    auto combine_threads_end = std::chrono::steady_clock::now();
 
-    // return 0;
+    auto sort_print_start = std::chrono::steady_clock::now();
+    // Convert the unordered map to a vector for sorting
+    std::vector<std::pair<std::string, cityInfo>> sortedCityInfos(combinedCityInfo.begin(), combinedCityInfo.end());
+
+    // Sort the cityInfos by city name
+    std::sort(sortedCityInfos.begin(), sortedCityInfos.end(), compareCityInfos);
+
+    // Output sorted cityInfos
+    for (const auto& pair : sortedCityInfos) {
+        const cityInfo& res = pair.second;
+        double mean = res.sum / static_cast<double>(res.count);
+        std::cout << "City: " << pair.first << ", Min: " << res.min
+                  << ", Mean: " << mean << ", Max: " << res.max << std::endl;
+    }
+    auto sort_print_end = std::chrono::steady_clock::now();
+    auto total_time_end = std::chrono::steady_clock::now();
+
+    // Calculate and output the elapsed time
+    std::chrono::duration<double> total_time = total_time_end - total_time_start;
+    std::chrono::duration<double> sort_print_time = sort_print_end - sort_print_start;
+    std::chrono::duration<double> combine_threads_time =  combine_threads_end -  combine_threads_start;
+    std::chrono::duration<double> threads_time =  threads_end -  threads_start;
+    std::chrono::duration<double> map_file_time =  map_file_end -  map_file_start;
+
+    std::cout << "Sorting and printing time: " << sort_print_time.count() << " seconds" << std::endl;
+    std::cout << "Combining threads time: " << combine_threads_time.count() << " seconds" << std::endl;
+    std::cout << "Threads time: " << threads_time.count() << " seconds" << std::endl;
+    std::cout << "Mapping file time: " << map_file_time.count() << " seconds" << std::endl;
+    std::cout << "Total execution time: " << total_time.count() << " seconds" << std::endl;
+
+    return 0;
 }
