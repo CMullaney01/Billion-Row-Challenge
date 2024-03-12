@@ -13,7 +13,7 @@
 
 #define CHUNKS 16
 
-struct cityInfo {
+struct CityInfo {
     int count;
     double sum, min, max;
 };
@@ -24,57 +24,56 @@ void error(const std::string& message) {
 }
 
 // Function to update cityInfos based on temperature and city
-void updateCityInfos(std::string cityName, double temperature, std::unordered_map<std::string, cityInfo>& cityInfos) {
-    auto it = cityInfos.find(cityName);
-    if (it != cityInfos.end()) {
-        it->second.count++;
-        it->second.sum += temperature;
-        it->second.min = std::min(it->second.min, temperature);
-        it->second.max = std::max(it->second.max, temperature);
-    } else {
-        // Create a new entry if cityName hasn't been seen yet
-        cityInfos.insert({cityName, {1, temperature, temperature, temperature}});
-    }
+void updateCityInfos(const std::string& cityName, double temperature, std::unordered_map<std::string, CityInfo>& cityInfos) {
+    auto& info = cityInfos[cityName]; // Create or retrieve entry for cityName
+    info.count++;
+    info.sum += temperature;
+    info.min = std::min(info.min, temperature);
+    info.max = std::max(info.max, temperature);
 }
 
 // Comparator function to sort cityInfos by city name
-bool compareCityInfos(const std::pair<std::string, cityInfo>& a, const std::pair<std::string, cityInfo>& b) {
+bool compareCityInfos(const std::pair<std::string, CityInfo>& a, const std::pair<std::string, CityInfo>& b) {
     return a.first < b.first;
 }
 
 // Function to process a chunk of data
-void Thread(const char* data, off_t chunk_start, off_t chunk_end, std::unordered_map<std::string, cityInfo>& cityInfos) {
+void Thread(const char* data, off_t chunk_start, off_t chunk_end, std::unordered_map<std::string, CityInfo>& cityInfos) {
     off_t pos = chunk_start;
-    std::string line;
+    std::string cityName;
+    std::string tempStr;
 
-    // Process the chunk of data byte by byte
+    // Check if it's not the very first chunk
+    if (chunk_start != 0) {
+        // Wind to the front of the next line as past thread handled the testcase
+        while (pos < chunk_end && data[pos] != '\n') {
+            pos++; // Move to the next character
+        }
+        pos++;
+    }
     while (pos < chunk_end) {
         // Read characters until a newline is encountered or the end of the chunk is reached
         char c = data[pos]; // Initialize c with data[pos]
-        while (c != '\n' && pos < chunk_end) {
-            line.push_back(c);
-            ++pos;
+        while (c != ';') {
             c = data[pos]; // Read the next character
+            cityName.push_back(c);
+            ++pos;
         }
-        ++pos;
+        while (c != '\n') {
+            c = data[pos]; // Read the next character
+            tempStr.push_back(c);
+            ++pos;
+        }
 
-        // Output the line (for testing purposes)
-        // std::cout << line << std::endl;
-
-        // Find the position of the first ';' character
-        size_t delimiterPos = line.find(';');
-        if (delimiterPos == std::string::npos)
-            continue; // Not a valid line format
-
-        // Extract the city name and temperature
-        std::string cityName = line.substr(0, delimiterPos);
-        double temperature = std::strtod(line.c_str() + delimiterPos + 1, nullptr);
+        // std::cout << tempStr << std::endl;
+        double temperature = std::strtod(tempStr.c_str(), nullptr);
 
         // Update cityInfos
         updateCityInfos(cityName, temperature, cityInfos);
 
         // Clear the line buffer for the next line
-        line.clear();
+        cityName.clear();
+        tempStr.clear();
     }
 }
 
@@ -109,7 +108,7 @@ int main(int argc, char* argv[]) {
     auto threads_start = std::chrono::steady_clock::now();
     // Create threads to process chunks
     std::vector<std::thread> threads;
-    std::vector<std::unordered_map<std::string, cityInfo>> cityMaps(numChunks); // Vector of city info maps
+    std::vector<std::unordered_map<std::string, CityInfo>> cityMaps(numChunks); // Vector of city info maps
     for (int i = 0; i < numChunks; ++i) {
         // std::cout << "Starting Thread: " << i << std::endl;
         off_t start = i * fileSize / numChunks;
@@ -133,11 +132,11 @@ int main(int argc, char* argv[]) {
 
     auto combine_threads_start = std::chrono::steady_clock::now();
     // Combine the city information from all maps into a single map
-    std::unordered_map<std::string, cityInfo> combinedCityInfo;
+    std::unordered_map<std::string, CityInfo> combinedCityInfo;
     for (const auto& cityMap : cityMaps) {
         for (const auto& pair : cityMap) {
             const std::string& cityName = pair.first;
-            const cityInfo& info = pair.second;
+            const CityInfo& info = pair.second;
             combinedCityInfo[cityName].sum += info.sum;
             combinedCityInfo[cityName].count += info.count;
             combinedCityInfo[cityName].min = std::min(combinedCityInfo[cityName].min, info.min);
@@ -148,14 +147,14 @@ int main(int argc, char* argv[]) {
 
     auto sort_print_start = std::chrono::steady_clock::now();
     // Convert the unordered map to a vector for sorting
-    std::vector<std::pair<std::string, cityInfo>> sortedCityInfos(combinedCityInfo.begin(), combinedCityInfo.end());
+    std::vector<std::pair<std::string, CityInfo>> sortedCityInfos(combinedCityInfo.begin(), combinedCityInfo.end());
 
     // Sort the cityInfos by city name
     std::sort(sortedCityInfos.begin(), sortedCityInfos.end(), compareCityInfos);
 
     // Output sorted cityInfos
     for (const auto& pair : sortedCityInfos) {
-        const cityInfo& res = pair.second;
+        const CityInfo& res = pair.second;
         double mean = res.sum / static_cast<double>(res.count);
         std::cout << "City: " << pair.first << ", Min: " << res.min
                   << ", Mean: " << mean << ", Max: " << res.max << std::endl;
