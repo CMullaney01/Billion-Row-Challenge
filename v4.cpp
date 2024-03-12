@@ -10,12 +10,15 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <chrono> 
+#include <iomanip>
 
-#define CHUNKS 64
+#define CHUNKS 256
 
 struct CityInfo {
     int count;
-    double sum, min, max;
+    long sum; 
+    int min;  
+    int max;  
 };
 
 void error(const std::string& message) {
@@ -24,9 +27,9 @@ void error(const std::string& message) {
 }
 
 // Function to update cityInfos based on temperature and city
-void updateCityInfos(const std::string& cityName, double temperature, std::unordered_map<std::string, CityInfo>& cityInfos) {
+void updateCityInfos(const std::string& cityName, int temperature, std::unordered_map<std::string, CityInfo>& cityInfos) {
     auto& info = cityInfos[cityName]; // Create or retrieve entry for cityName
-    info.count++;
+    info.count ++;
     info.sum += temperature;
     info.min = std::min(info.min, temperature);
     info.max = std::max(info.max, temperature);
@@ -61,12 +64,13 @@ void Thread(const char* data, off_t chunk_start, off_t chunk_end, std::unordered
         }
         while (c != '\n') {
             c = data[pos]; // Read the next character
-            tempStr.push_back(c);
+            if (c != '.')
+                tempStr.push_back(c);
             ++pos;
         }
 
         // std::cout << tempStr << std::endl;
-        double temperature = std::strtod(tempStr.c_str(), nullptr);
+        int temperature = std::stoi(tempStr);
 
         // Update cityInfos
         updateCityInfos(cityName, temperature, cityInfos);
@@ -153,11 +157,16 @@ int main(int argc, char* argv[]) {
     std::sort(sortedCityInfos.begin(), sortedCityInfos.end(), compareCityInfos);
 
     // Output sorted cityInfos
+    // Your code to iterate over sortedCityInfos
     for (const auto& pair : sortedCityInfos) {
         const CityInfo& res = pair.second;
-        double mean = res.sum / static_cast<double>(res.count);
-        std::cout << "City: " << pair.first << ", Min: " << res.min
-                  << ", Mean: " << mean << ", Max: " << res.max << std::endl;
+        double mean = (res.sum / static_cast<double>(res.count)) / 10;
+        double min = static_cast<double>(res.min) / 10;
+        double max = static_cast<double>(res.max) / 10;
+        
+        // Output with 1 decimal place
+        std::cout << "City: " << pair.first << ", Min: " << std::fixed << std::setprecision(1) << min
+                << ", Mean: " << mean << ", Max: " << max << std::endl;
     }
     auto sort_print_end = std::chrono::steady_clock::now();
     auto total_time_end = std::chrono::steady_clock::now();

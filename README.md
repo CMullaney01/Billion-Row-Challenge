@@ -32,6 +32,6 @@ If you run this version we have used chrono to output timestamps, once again the
 
 ### V4:
 
-Structurally the same we have made some code improvements but who knew using -O3 compiler would make such amazing improvements
+Structurally the same we have made some code improvements such as using integer maths but who knew using -O3 compiler would make such amazing improvements
 
-~ 8 seconds
+~ 5 seconds
