@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -Wall -Wextra -pedantic -std=c++11 -I./src/includes
+CXXFLAGS = -Wall -Wextra -pedantic -std=c++11 -O3 -I./src/includes
 LDFLAGS = 
 
 SRC_DIR = ./src
