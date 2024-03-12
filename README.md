@@ -29,6 +29,6 @@ I failed to achieve this without memory mapping the data. This is due to small n
 
 ~ 25 seconds
 
-If you run this version we have used chrono to output timestamps, once again the processing of the file is the biggest limiting factor, taking 24.9165 seconds of the total 24.9989 seconds. how the hell do people do this in less than 2 seconds?
+If you run this version we have used chrono to output timestamps, once again the processing of the file is the biggest limiting factor, taking 24.9165 seconds of the total 24.9989 seconds. How the hell do people do this in less than 2 seconds?
 
 
