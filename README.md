@@ -11,7 +11,6 @@ Format:
 Hamburg;12.0
 Bulawayo;8.9
 Palembang;38.8
-...
 ```
 
 ### v1:
