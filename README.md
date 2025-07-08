@@ -15,7 +15,7 @@ Palembang;38.8
 
 ### v1:
 
-Single Thread, caluclate min mean max with an array map takes about 5 minutes really not good
+Single Thread, caluclate min mean max with an array map takes about 5 minutes.
 
 ### V2:
 
@@ -28,10 +28,10 @@ I failed to achieve this without memory mapping the data. This is due to small n
 
 ~ 25 seconds
 
-If you run this version we have used chrono to output timestamps, once again the processing of the file is the biggest limiting factor, taking 24.9165 seconds of the total 24.9989 seconds. How the hell do people do this in less than 2 seconds?
+If you run this version we have used chrono to output timestamps, once again the processing of the file is the biggest limiting factor, taking 24.9165 seconds of the total 24.9989 seconds.
 
 ### V4:
 
-Structurally the same we have made some code improvements such as using integer maths but who knew using -O3 compiler would make such amazing improvements
+Utilising the O3 compiler we have identified some areas for improvement achieving ~5 seconds. Next steps would be to implement improvements to take advantage of compiler optimisations and architecture.
 
 ~ 5 seconds
